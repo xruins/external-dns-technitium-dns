@@ -25,8 +25,6 @@ type Config struct {
 	ListenAddress string
 	// ListenPort is the port for the main webhook API.
 	ListenPort int
-	// HealthPort is the port for the liveness/readiness health endpoints.
-	HealthPort int
 	// TechnitiumTimeout is the per-request HTTP timeout when calling the Technitium API.
 	TechnitiumTimeout time.Duration
 	// TechnitiumVerifySSL controls whether the Technitium server's TLS certificate is verified.
@@ -39,8 +37,7 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		ListenAddress:       getEnvOrDefault("LISTEN_ADDRESS", "0.0.0.0"),
-		ListenPort:          getEnvIntOrDefault("LISTEN_PORT", 8888),
-		HealthPort:          getEnvIntOrDefault("HEALTH_PORT", 8080),
+		ListenPort:          getEnvIntOrDefault("LISTEN_PORT", 8080),
 		TechnitiumURL:       strings.TrimRight(os.Getenv("TECHNITIUM_URL"), "/"),
 		TechnitiumUsername:  os.Getenv("TECHNITIUM_USERNAME"),
 		TechnitiumPassword:  os.Getenv("TECHNITIUM_PASSWORD"),

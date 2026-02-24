@@ -19,6 +19,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 # Copy the binary from the build stage.
 COPY --from=builder /external-dns-technitium-dns /external-dns-technitium-dns
 
-EXPOSE 8888 8080
+EXPOSE 8080
 
 ENTRYPOINT ["/external-dns-technitium-dns"]

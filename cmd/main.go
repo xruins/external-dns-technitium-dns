@@ -54,24 +54,6 @@ func run() error {
 		return fmt.Errorf("authenticating with Technitium: %w", err)
 	}
 
-	// Health server (port cfg.HealthPort): serves /healthz and /health.
-	healthMux := http.NewServeMux()
-	healthMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"ok"}`)
-	})
-	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"ok"}`)
-	})
-	healthServer := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.ListenAddress, cfg.HealthPort),
-		Handler:      healthMux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
-
-	// Main webhook server (port cfg.ListenPort).
 	webhookServer := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.ListenAddress, cfg.ListenPort),
 		Handler:      webhook.NewServer(cfg, client),
@@ -82,13 +64,6 @@ func run() error {
 	// Trap SIGINT and SIGTERM for graceful shutdown.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		slog.Info("Health server listening", "addr", healthServer.Addr)
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Health server error", "error", err)
-		}
-	}()
 
 	go func() {
 		slog.Info("Webhook server listening", "addr", webhookServer.Addr)
@@ -105,9 +80,6 @@ func run() error {
 
 	if err := webhookServer.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Webhook server shutdown error", "error", err)
-	}
-	if err := healthServer.Shutdown(shutdownCtx); err != nil {
-		slog.Error("Health server shutdown error", "error", err)
 	}
 
 	return nil

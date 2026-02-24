@@ -26,15 +26,10 @@ func buildComment(ep *Endpoint) string {
 	return fmt.Sprintf("%s (resource: %s)", technitium.CommentPrefix, resource)
 }
 
-// isOwnedRecord returns true when the record's comment indicates it was created by this webhook.
-func isOwnedRecord(r technitium.Record) bool {
-	return strings.HasPrefix(r.Comments, technitium.CommentPrefix)
-}
-
-// isAddressRecord returns true for A and AAAA record types.
-func isAddressRecord(recordType string) bool {
+// isSupportedRecord returns true for record types this webhook can create and delete.
+func isSupportedRecord(recordType string) bool {
 	t := strings.ToUpper(recordType)
-	return t == "A" || t == "AAAA"
+	return t == "A" || t == "AAAA" || t == "TXT"
 }
 
 // createEndpoint adds all targets of the endpoint as individual DNS records.
@@ -88,18 +83,9 @@ func (h *changeHandler) deleteSingleRecord(ctx context.Context, domain, recordTy
 		return nil
 	}
 
-	// Safety: only delete A and AAAA records through this path; other types require
-	// explicit operator action to prevent accidental data loss.
-	if !isAddressRecord(matched.Type) {
-		slog.Warn("Skipping deletion: record type is not A or AAAA",
+	if !isSupportedRecord(matched.Type) {
+		slog.Warn("Skipping deletion: unsupported record type",
 			"name", domain, "type", matched.Type, "target", target)
-		return nil
-	}
-
-	// Ownership: only delete records that this webhook created.
-	if !isOwnedRecord(*matched) {
-		slog.Warn("Skipping deletion: record was not created by this webhook",
-			"name", domain, "type", matched.Type, "comment", matched.Comments)
 		return nil
 	}
 
