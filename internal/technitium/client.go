@@ -122,11 +122,15 @@ func (c *Client) doGetWithRetry(ctx context.Context, path string, params url.Val
 		return fmt.Errorf("Technitium API error: %s", envelope.ErrorMessage)
 	}
 
-	if dest == nil || len(envelope.Response) == 0 {
+	if dest == nil {
 		return nil
 	}
+	data := envelope.Response
+	if len(data) == 0 {
+		data = body
+	}
 
-	if err := json.Unmarshal(envelope.Response, dest); err != nil {
+	if err := json.Unmarshal(data, dest); err != nil {
 		return fmt.Errorf("decoding response body: %w", err)
 	}
 	return nil
