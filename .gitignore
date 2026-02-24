@@ -1,0 +1,5 @@
+# Built binary
+external-dns-technitium-dns
+
+# Claude Code project files
+.claude/
