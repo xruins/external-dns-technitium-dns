@@ -12,5 +12,12 @@
   },
   "dependencies": {
     "stabilityDays": 14
-  }
+  },
+  "packageRules": [
+    {
+      "matchFiles": ["mise.toml"],
+      "rangeStrategy": "bump",
+      "semanticCommits": true
+    }
+  ]
 }
