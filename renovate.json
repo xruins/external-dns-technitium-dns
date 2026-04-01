@@ -6,18 +6,14 @@
     ":automergeAll",
     "schedule:automergeDaily"
   ],
-  "go": {
-    "enabled": true,
-    "stabilityDays": 7
-  },
-  "dependencies": {
-    "stabilityDays": 14
-  },
   "packageRules": [
     {
-      "matchFiles": ["mise.toml"],
-      "rangeStrategy": "bump",
-      "semanticCommits": true
+      "matchManagers": ["gomod"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "matchDepTypes": ["dependencies"],
+      "minimumReleaseAge": "14 days"
     }
   ]
 }
