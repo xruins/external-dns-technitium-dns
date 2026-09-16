@@ -83,12 +83,13 @@ func (c *Client) doGet(ctx context.Context, path string, params url.Values, dest
 }
 
 func (c *Client) doGetWithRetry(ctx context.Context, path string, params url.Values, dest interface{}, retry bool) error {
-	params.Set("token", c.getToken())
-
 	apiURL := c.baseURL + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return fmt.Errorf("building request: %w", err)
+	}
+	if token := c.getToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -113,8 +114,6 @@ func (c *Client) doGetWithRetry(ctx context.Context, path string, params url.Val
 		if err := c.Login(ctx); err != nil {
 			return fmt.Errorf("re-login after token expiry: %w", err)
 		}
-		// Update params with new token for retry.
-		params.Set("token", c.getToken())
 		return c.doGetWithRetry(ctx, path, params, dest, false)
 	}
 
