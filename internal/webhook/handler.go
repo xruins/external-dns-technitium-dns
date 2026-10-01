@@ -39,6 +39,12 @@ func (h *changeHandler) createEndpoint(ctx context.Context, ep *Endpoint, overwr
 	var errs []string
 	for _, target := range ep.Targets {
 		if err := h.client.AddRecord(ctx, ep.DNSName, ep.RecordType, target, ep.RecordTTL, comment, overwrite); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "already exists") {
+				if cerr := h.checkExisting(ctx, ep, target); cerr != nil {
+					errs = append(errs, cerr.Error())
+				}
+				continue
+			}
 			errs = append(errs, err.Error())
 		} else {
 			slog.Info("Created DNS record", "name", ep.DNSName, "type", ep.RecordType, "target", target)
@@ -48,6 +54,36 @@ func (h *changeHandler) createEndpoint(ctx context.Context, ep *Endpoint, overwr
 		return fmt.Errorf("creating records for %s %s: %s", ep.RecordType, ep.DNSName, strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+// checkExisting is called when Technitium reports that a record already exists.
+// It returns nil when the existing record matches what we tried to write (target and, if
+// specified, TTL); otherwise it returns an error describing both the existing (got) and
+// the desired (want) content.
+func (h *changeHandler) checkExisting(ctx context.Context, ep *Endpoint, target string) error {
+	want := fmt.Sprintf("target=%q ttl=%d", target, ep.RecordTTL)
+
+	existing, err := h.client.GetRecords(ctx, ep.DNSName, ep.RecordType)
+	if err != nil {
+		return fmt.Errorf("record %s %s already exists but fetching it failed (want %s): %w", ep.RecordType, ep.DNSName, want, err)
+	}
+
+	var got []string
+	for i := range existing {
+		r := &existing[i]
+		t, err := technitium.ExtractTarget(r.Type, r.RData)
+		if err != nil {
+			continue
+		}
+		if t == target && (ep.RecordTTL <= 0 || r.TTL == int64(ep.RecordTTL)) {
+			slog.Debug("DNS record already exists with identical content; ignoring",
+				"name", ep.DNSName, "type", ep.RecordType, "target", target)
+			return nil
+		}
+		got = append(got, fmt.Sprintf("target=%q ttl=%d comments=%q", t, r.TTL, r.Comments))
+	}
+	return fmt.Errorf("record %s %s already exists with different content: got [%s], want %s",
+		ep.RecordType, ep.DNSName, strings.Join(got, "; "), want)
 }
 
 // deleteEndpoint removes all targets of the endpoint from Technitium.
