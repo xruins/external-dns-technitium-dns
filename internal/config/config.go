@@ -17,8 +17,9 @@ type Config struct {
 	TechnitiumUsername string
 	// TechnitiumPassword is the password used for Technitium API authentication.
 	TechnitiumPassword string
-	// Zone is the DNS zone that this webhook manages.
-	Zone string
+	// Zones is the list of DNS zones that this webhook manages.
+	// Each record is written to the zone whose name is the longest suffix match of the record name.
+	Zones []string
 	// DomainFilters is the list of domains to filter; sent to external-dns during negotiation.
 	DomainFilters []string
 	// ListenAddress is the IP address the main webhook server binds to.
@@ -41,19 +42,19 @@ func Load() (*Config, error) {
 		TechnitiumURL:       strings.TrimRight(os.Getenv("TECHNITIUM_URL"), "/"),
 		TechnitiumUsername:  os.Getenv("TECHNITIUM_USERNAME"),
 		TechnitiumPassword:  os.Getenv("TECHNITIUM_PASSWORD"),
-		Zone:                os.Getenv("ZONE"),
 		TechnitiumTimeout:   time.Duration(getEnvIntOrDefault("TECHNITIUM_TIMEOUT_SECONDS", 10)) * time.Second,
 		TechnitiumVerifySSL: getEnvBoolOrDefault("TECHNITIUM_VERIFY_SSL", true),
 		LogLevel:            strings.ToUpper(getEnvOrDefault("LOG_LEVEL", "INFO")),
 	}
 
-	if filters := os.Getenv("DOMAIN_FILTERS"); filters != "" {
-		for _, f := range strings.Split(filters, ";") {
-			if f = strings.TrimSpace(f); f != "" {
-				cfg.DomainFilters = append(cfg.DomainFilters, f)
-			}
-		}
+	cfg.Zones = splitList(os.Getenv("ZONES"))
+	if len(cfg.Zones) == 0 {
+		cfg.Zones = splitList(os.Getenv("ZONE"))
 	}
+	for i, z := range cfg.Zones {
+		cfg.Zones[i] = NormalizeName(z)
+	}
+	cfg.DomainFilters = splitList(os.Getenv("DOMAIN_FILTERS"))
 
 	var errs []string
 	if cfg.TechnitiumURL == "" {
@@ -65,8 +66,8 @@ func Load() (*Config, error) {
 	if cfg.TechnitiumPassword == "" {
 		errs = append(errs, "TECHNITIUM_PASSWORD is required")
 	}
-	if cfg.Zone == "" {
-		errs = append(errs, "ZONE is required")
+	if len(cfg.Zones) == 0 {
+		errs = append(errs, "ZONES (or ZONE) is required")
 	}
 
 	if len(errs) > 0 {
@@ -74,6 +75,22 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// NormalizeName lower-cases a DNS name and strips surrounding whitespace and the trailing dot.
+func NormalizeName(name string) string {
+	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+}
+
+// splitList splits a semicolon-separated list, dropping empty entries.
+func splitList(v string) []string {
+	var out []string
+	for _, f := range strings.Split(v, ";") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func getEnvOrDefault(key, defaultVal string) string {

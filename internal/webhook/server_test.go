@@ -15,7 +15,7 @@ import (
 // The Technitium client is intentionally nil because these tests only cover handlers
 // that do not call the Technitium API.
 func makeTestServer(zone string, filters []string) *Server {
-	cfg := &config.Config{Zone: zone, DomainFilters: filters}
+	cfg := &config.Config{Zones: []string{zone}, DomainFilters: filters}
 	return NewServer(cfg, nil)
 }
 

@@ -49,12 +49,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNegotiate(w http.ResponseWriter, r *http.Request) {
 	filters := s.cfg.DomainFilters
 	if len(filters) == 0 {
-		filters = []string{s.cfg.Zone}
+		filters = s.cfg.Zones
 	}
 	writeJSON(w, http.StatusOK, DomainFilter{Filters: filters})
 }
 
-// handleGetRecords returns all DNS records currently managed in the Technitium zone.
+// handleGetRecords returns all DNS records currently managed in the Technitium zones.
 // Records are grouped by (dnsName, recordType) to match the external-dns Endpoint model.
 func (s *Server) handleGetRecords(w http.ResponseWriter, r *http.Request) {
 	records, err := s.client.GetAllRecords(r.Context())

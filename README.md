@@ -38,8 +38,9 @@ All settings are provided via environment variables.
 | `TECHNITIUM_URL`            | ✅       | —         | Base URL of the Technitium DNS server (e.g. `http://localhost:5380`) |
 | `TECHNITIUM_USERNAME`       | ✅       | —         | Technitium admin username                            |
 | `TECHNITIUM_PASSWORD`       | ✅       | —         | Technitium admin password                            |
-| `ZONE`                      | ✅       | —         | DNS zone to manage (e.g. `example.com`)              |
-| `DOMAIN_FILTERS`            |          | `$ZONE`   | Semicolon-separated list of domains passed to external-dns during negotiation |
+| `ZONES`                     | ✅ (or `ZONE`) | — | Semicolon-separated list of DNS zones to manage (e.g. `example.com;a.example.com`). Each record is written to the zone that is the longest suffix match of its name |
+| `ZONE`                      |          | —         | Single DNS zone to manage; used only when `ZONES` is not set |
+| `DOMAIN_FILTERS`            |          | `$ZONES`  | Semicolon-separated list of domains passed to external-dns during negotiation |
 | `LISTEN_ADDRESS`            |          | `0.0.0.0` | Address the webhook server binds to                  |
 | `LISTEN_PORT`               |          | `8080`    | Port for the webhook API (also serves `/health` and `/healthz`) |
 | `TECHNITIUM_TIMEOUT_SECONDS`|          | `10`      | Per-request HTTP timeout when calling Technitium     |

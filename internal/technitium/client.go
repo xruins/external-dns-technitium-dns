@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 
@@ -24,7 +25,7 @@ type Client struct {
 	baseURL    string
 	username   string
 	password   string
-	zone       string
+	zones      []string
 	httpClient *http.Client
 
 	tokenMu sync.RWMutex
@@ -37,11 +38,17 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	if !cfg.TechnitiumVerifySSL {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // intentional opt-in
 	}
+	zones := make([]string, 0, len(cfg.Zones))
+	for _, z := range cfg.Zones {
+		zones = append(zones, config.NormalizeName(z))
+	}
+	// Longest zone first so that zoneFor picks the most specific match.
+	sort.SliceStable(zones, func(i, j int) bool { return len(zones[i]) > len(zones[j]) })
 	return &Client{
 		baseURL:  cfg.TechnitiumURL,
 		username: cfg.TechnitiumUsername,
 		password: cfg.TechnitiumPassword,
-		zone:     cfg.Zone,
+		zones:    zones,
 		httpClient: &http.Client{
 			Timeout:   cfg.TechnitiumTimeout,
 			Transport: transport,
@@ -135,25 +142,52 @@ func (c *Client) doGetWithRetry(ctx context.Context, path string, params url.Val
 	return nil
 }
 
-// GetAllRecords retrieves every record in the configured zone.
-func (c *Client) GetAllRecords(ctx context.Context) ([]Record, error) {
-	params := url.Values{}
-	params.Set("domain", c.zone)
-	params.Set("zone", c.zone)
-	params.Set("listZone", "true")
-
-	var resp getRecordsResponse
-	if err := c.doGet(ctx, "/api/zones/records/get", params, &resp); err != nil {
-		return nil, fmt.Errorf("getting records for zone %q: %w", c.zone, err)
+// zoneFor returns the managed zone that owns domain, i.e. the longest zone that equals
+// domain or is a suffix of it on a label boundary.
+func (c *Client) zoneFor(domain string) (string, error) {
+	name := config.NormalizeName(domain)
+	for _, z := range c.zones {
+		if name == z || strings.HasSuffix(name, "."+z) {
+			return z, nil
+		}
 	}
-	return resp.Records, nil
+	return "", fmt.Errorf("domain %q does not belong to any managed zone %v", domain, c.zones)
+}
+
+// GetAllRecords retrieves every record in all managed zones.
+// Records stored in a parent zone whose name belongs to a more specific managed zone are
+// skipped, because the child zone is authoritative for them.
+func (c *Client) GetAllRecords(ctx context.Context) ([]Record, error) {
+	var all []Record
+	for _, zone := range c.zones {
+		params := url.Values{}
+		params.Set("domain", zone)
+		params.Set("zone", zone)
+		params.Set("listZone", "true")
+
+		var resp getRecordsResponse
+		if err := c.doGet(ctx, "/api/zones/records/get", params, &resp); err != nil {
+			return nil, fmt.Errorf("getting records for zone %q: %w", zone, err)
+		}
+		for _, r := range resp.Records {
+			if owner, err := c.zoneFor(r.Name); err != nil || owner != zone {
+				continue
+			}
+			all = append(all, r)
+		}
+	}
+	return all, nil
 }
 
 // GetRecords retrieves records for a specific domain name, optionally filtered by type.
 func (c *Client) GetRecords(ctx context.Context, domain, recordType string) ([]Record, error) {
+	zone, err := c.zoneFor(domain)
+	if err != nil {
+		return nil, err
+	}
 	params := url.Values{}
 	params.Set("domain", domain)
-	params.Set("zone", c.zone)
+	params.Set("zone", zone)
 
 	var resp getRecordsResponse
 	if err := c.doGet(ctx, "/api/zones/records/get", params, &resp); err != nil {
@@ -176,9 +210,13 @@ func (c *Client) GetRecords(ctx context.Context, domain, recordType string) ([]R
 // AddRecord creates a DNS record in Technitium.
 // If overwrite is true, any existing record with the same name, type, and data is replaced.
 func (c *Client) AddRecord(ctx context.Context, domain, recordType, target string, ttl int64, comment string, overwrite bool) error {
+	zone, err := c.zoneFor(domain)
+	if err != nil {
+		return err
+	}
 	params := url.Values{}
 	params.Set("domain", domain)
-	params.Set("zone", c.zone)
+	params.Set("zone", zone)
 	params.Set("type", recordType)
 	if ttl > 0 {
 		params.Set("ttl", fmt.Sprintf("%d", ttl))
@@ -200,9 +238,13 @@ func (c *Client) AddRecord(ctx context.Context, domain, recordType, target strin
 
 // DeleteRecord removes a specific DNS record from Technitium.
 func (c *Client) DeleteRecord(ctx context.Context, domain, recordType, target string) error {
+	zone, err := c.zoneFor(domain)
+	if err != nil {
+		return err
+	}
 	params := url.Values{}
 	params.Set("domain", domain)
-	params.Set("zone", c.zone)
+	params.Set("zone", zone)
 	params.Set("type", recordType)
 
 	if err := setRecordTypeParams(params, recordType, target); err != nil {
